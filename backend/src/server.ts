@@ -17,6 +17,9 @@ import userRoutes from './routes/user';
 
 const app = express();
 
+// Trust proxy for Vercel / reverse-proxy environments
+app.set('trust proxy', 1);
+
 // Security and utility middlewares
 app.use(
   helmet({

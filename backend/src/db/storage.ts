@@ -22,8 +22,44 @@ interface IDatabaseSchema {
   achievements: IAchievement[];
 }
 
-const DATA_DIR = path.resolve(__dirname, '../../data');
-const DB_FILE = path.join(DATA_DIR, 'fit_ai_database.json');
+import os from 'os';
+
+function resolveStorageLocation(): { dir: string; file: string } {
+  const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production';
+  
+  if (process.env.DATA_DIR) {
+    return {
+      dir: process.env.DATA_DIR,
+      file: path.join(process.env.DATA_DIR, 'fit_ai_database.json'),
+    };
+  }
+
+  if (!isServerless) {
+    try {
+      const localDir = path.resolve(__dirname, '../../data');
+      if (!fs.existsSync(localDir)) {
+        fs.mkdirSync(localDir, { recursive: true });
+      }
+      return { dir: localDir, file: path.join(localDir, 'fit_ai_database.json') };
+    } catch {
+      // Fallback to temp
+    }
+  }
+
+  const tmpDir = path.join(os.tmpdir(), 'fit-ai-data');
+  try {
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+  } catch {
+    return { dir: os.tmpdir(), file: path.join(os.tmpdir(), 'fit_ai_database.json') };
+  }
+  return { dir: tmpDir, file: path.join(tmpDir, 'fit_ai_database.json') };
+}
+
+const storageLoc = resolveStorageLocation();
+const DATA_DIR = storageLoc.dir;
+const DB_FILE = storageLoc.file;
 
 const INITIAL_DATA: IDatabaseSchema = {
   users: [],
@@ -49,7 +85,9 @@ class DataStore {
     if (this.isLoaded) return;
     try {
       if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
+        try {
+          fs.mkdirSync(DATA_DIR, { recursive: true });
+        } catch {}
       }
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
@@ -60,7 +98,7 @@ class DataStore {
       }
       this.isLoaded = true;
     } catch (err) {
-      console.error('Failed to initialize local data store:', err);
+      console.error('Failed to initialize local data store, continuing in-memory:', err);
       this.data = INITIAL_DATA;
       this.isLoaded = true;
     }
@@ -71,13 +109,15 @@ class DataStore {
     this.writeLock = true;
     try {
       if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
+        try {
+          fs.mkdirSync(DATA_DIR, { recursive: true });
+        } catch {}
       }
       const tempFile = `${DB_FILE}.tmp`;
       fs.writeFileSync(tempFile, JSON.stringify(this.data, null, 2), 'utf-8');
       fs.renameSync(tempFile, DB_FILE);
     } catch (err) {
-      console.error('Failed to persist database to file:', err);
+      // In-memory state remains intact even if disk write is temporarily unavailable
     } finally {
       this.writeLock = false;
     }
