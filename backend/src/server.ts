@@ -103,16 +103,16 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 async function startServer() {
-  app.listen(ENV.PORT, () => {
-    console.log(`🚀 Fit AI Backend running at http://localhost:${ENV.PORT}`);
-    console.log(`🌿 Health check: http://localhost:${ENV.PORT}/api/health`);
+  const port = process.env.PORT || ENV.PORT || 5000;
+  app.listen(port, () => {
+    console.log(`🚀 Fit AI Backend running on port ${port}`);
     connectDB().catch(() => {});
   });
 }
 
-if (!process.env.VERCEL) {
+// Start server unless executed in automated unit test suite
+if (process.env.NODE_ENV !== 'test') {
   startServer();
 }
 
-export { app };
 export default app;
