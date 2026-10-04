@@ -6,10 +6,12 @@ interface Props {
   bmiInfo: IBmiResult | null;
   heightCm?: number;
   weightKg?: number;
+  age?: number;
 }
 
-export const BmiCard: React.FC<Props> = ({ bmiInfo, heightCm }) => {
+export const BmiCard: React.FC<Props> = ({ bmiInfo, heightCm, age }) => {
   if (!bmiInfo) return null;
+  const isMinor = age !== undefined && age < 18;
 
   return (
     <div className="surface-card" style={{ position: 'relative', overflow: 'hidden' }}>
@@ -63,22 +65,38 @@ export const BmiCard: React.FC<Props> = ({ bmiInfo, heightCm }) => {
         </div>
       )}
 
-      <div
-        style={{
-          marginTop: '1rem',
-          display: 'flex',
-          gap: '0.5rem',
-          alignItems: 'flex-start',
-          fontSize: '0.75rem',
-          color: 'var(--text-muted)',
-          lineHeight: 1.4,
-        }}
-      >
-        <Info size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-        <span>
-          <strong>Important Context:</strong> BMI is a standard population screening metric and does not distinguish between muscle mass and body fat. Athletic individuals with high muscle density may have an elevated BMI while in prime cardiovascular and metabolic health.
-        </span>
-      </div>
+      {isMinor ? (
+        <div
+          style={{
+            marginTop: '1rem',
+            padding: '0.75rem',
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.25)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.8rem',
+            color: '#10b981',
+          }}
+        >
+          <strong>Youth Growth Note:</strong> Standard adult BMI classifications do not apply to individuals under 18. Balanced nourishment, energetic sports, hydration, and restful sleep take priority over weight numbers.
+        </div>
+      ) : (
+        <div
+          style={{
+            marginTop: '1rem',
+            display: 'flex',
+            gap: '0.5rem',
+            alignItems: 'flex-start',
+            fontSize: '0.75rem',
+            color: 'var(--text-muted)',
+            lineHeight: 1.4,
+          }}
+        >
+          <Info size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <span>
+            <strong>Important Context:</strong> BMI is a standard population screening metric and does not distinguish between muscle mass and body fat. Athletic individuals with high muscle density may have an elevated BMI while in prime cardiovascular and metabolic health.
+          </span>
+        </div>
+      )}
     </div>
   );
 };

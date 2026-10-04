@@ -60,7 +60,7 @@ router.get('/summary', requireAuth, (req: AuthenticatedRequest, res: Response): 
   const initialWeight = weightEntries.length > 0 ? weightEntries[0].weightKg : profile?.weightKg || 70;
   const totalWeightDelta = Math.round((latestWeight - initialWeight) * 10) / 10;
 
-  const bmiInfo = profile ? calculateBMI(latestWeight, profile.heightCm) : null;
+  const bmiInfo = profile ? calculateBMI(latestWeight, profile.heightCm, profile.age) : null;
 
   res.json({
     profile,
@@ -88,7 +88,7 @@ router.post('/weight', requireAuth, (req: AuthenticatedRequest, res: Response): 
   const entryDate = date || new Date().toISOString().split('T')[0];
   const profile = dbStore.getProfileByUserId(req.user.id);
 
-  const bmi = profile ? calculateBMI(weightKg, profile.heightCm).bmi : 0;
+  const bmi = profile ? calculateBMI(weightKg, profile.heightCm, profile.age).bmi : 0;
 
   const entry: IWeightEntry = {
     id: `w_${Date.now()}`,

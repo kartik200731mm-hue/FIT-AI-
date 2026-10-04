@@ -43,7 +43,28 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Health check endpoint
+// Health check and root endpoint
+app.get(['/', '/api'], (_req: Request, res: Response) => {
+  res.json({
+    status: 'online',
+    app: 'Fit AI Backend API',
+    frontendApp: 'http://localhost:5173',
+    version: '1.0.0',
+    documentation: 'Open http://localhost:5173 in your browser to use the Fit AI web application.',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      profile: '/api/profile',
+      workouts: '/api/workouts',
+      meals: '/api/meals',
+      progress: '/api/progress',
+      aiCoach: '/api/ai-coach',
+      reminders: '/api/reminders',
+      achievements: '/api/achievements',
+    },
+  });
+});
+
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'healthy',
@@ -79,10 +100,10 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 async function startServer() {
-  await connectDB();
   app.listen(ENV.PORT, () => {
     console.log(`🚀 Fit AI Backend running at http://localhost:${ENV.PORT}`);
     console.log(`🌿 Health check: http://localhost:${ENV.PORT}/api/health`);
+    connectDB().catch(() => {});
   });
 }
 

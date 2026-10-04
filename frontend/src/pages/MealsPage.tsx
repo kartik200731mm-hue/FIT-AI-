@@ -11,6 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
+  ArrowRightLeft,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const MealsPage: React.FC = () => {
@@ -35,6 +37,18 @@ export const MealsPage: React.FC = () => {
   const [isAiMealModalOpen, setIsAiMealModalOpen] = useState(false);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [aiMealPlan, setAiMealPlan] = useState<any | null>(null);
+
+  // AI Food Swap Modal
+  const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
+  const [swapInput, setSwapInput] = useState('');
+  const [isSwapping, setIsSwapping] = useState(false);
+  const [swapResult, setSwapResult] = useState<{
+    original: string;
+    swap: string;
+    benefit: string;
+    estimatedMacros: string;
+    source: string;
+  } | null>(null);
 
   useEffect(() => {
     loadDailyMeals(currentDate);
@@ -165,6 +179,49 @@ export const MealsPage: React.FC = () => {
     }
   };
 
+  const handleRequestSwap = async (foodToSwap?: string) => {
+    const query = (foodToSwap || swapInput).trim();
+    if (!query) return;
+    setIsSwapping(true);
+    try {
+      const res = await api.getHealthySwap(query);
+      setSwapResult(res);
+      setSwapInput(query);
+      setIsSwapModalOpen(true);
+    } catch (err: any) {
+      alert(err.message || 'Failed getting swap recommendation');
+    } finally {
+      setIsSwapping(false);
+    }
+  };
+
+  const handleApplySwapAsFood = async (mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
+    if (!swapResult) return;
+    try {
+      await api.logMeal({
+        date: currentDate,
+        mealType,
+        items: [
+          {
+            name: swapResult.swap,
+            calories: 220, // default estimation
+            protein: 15,
+            carbs: 25,
+            fat: 6,
+            portion: '1 wholesome serving',
+            isEstimated: true,
+          },
+        ],
+      });
+      setIsSwapModalOpen(false);
+      setSwapResult(null);
+      setSwapInput('');
+      loadDailyMeals(currentDate);
+    } catch (err) {
+      console.error('Failed logging swapped food:', err);
+    }
+  };
+
   const mealSlots: { id: 'breakfast' | 'lunch' | 'dinner' | 'snack'; label: string; icon: string }[] = [
     { id: 'breakfast', label: 'Breakfast', icon: '🍳' },
     { id: 'lunch', label: 'Lunch', icon: '🥗' },
@@ -230,6 +287,16 @@ export const MealsPage: React.FC = () => {
               <ChevronRight size={18} />
             </button>
           </div>
+
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setSwapResult(null);
+              setIsSwapModalOpen(true);
+            }}
+          >
+            <ArrowRightLeft size={16} /> AI Food Swap
+          </button>
 
           <button className="btn-primary" onClick={() => setIsAiMealModalOpen(true)}>
             <Sparkles size={18} /> AI Meal Plan Generator
@@ -348,15 +415,26 @@ export const MealsPage: React.FC = () => {
                           )}
                         </div>
 
-                        {log && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <button
-                            onClick={() => handleDeleteItem(log.id, item.id)}
-                            style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: '4px' }}
-                            aria-label="Remove item"
+                            onClick={() => handleRequestSwap(item.name)}
+                            style={{ background: 'none', border: 'none', color: '#06b6d4', cursor: 'pointer', padding: '4px' }}
+                            title="Find smart healthy swap with AI"
+                            aria-label="Suggest swap"
                           >
-                            <Trash2 size={16} />
+                            <ArrowRightLeft size={15} />
                           </button>
-                        )}
+
+                          {log && (
+                            <button
+                              onClick={() => handleDeleteItem(log.id, item.id)}
+                              style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: '4px' }}
+                              aria-label="Remove item"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -588,6 +666,124 @@ export const MealsPage: React.FC = () => {
                   <button type="button" className="btn-primary" style={{ flex: 2 }} onClick={handleApplyAiMealPlan}>
                     Apply to Today's Food Log
                   </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* AI Healthy Food Swap Modal */}
+      {isSwapModalOpen && (
+        <div className="modal-backdrop" onClick={() => setIsSwapModalOpen(false)}>
+          <div className="modal-content" style={{ padding: '2rem' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <ArrowRightLeft size={22} color="#06b6d4" />
+                <h3 style={{ fontSize: '1.3rem', fontWeight: 800 }}>AI Healthy Food Swap</h3>
+              </div>
+              <button onClick={() => setIsSwapModalOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
+              Craving high-calorie snacks or refined foods? Get nutrient-dense, satisfying alternatives with clear wellness benefits.
+            </p>
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="e.g. Potato chips, Vanilla ice cream, Donut, Soda..."
+                value={swapInput}
+                onChange={(e) => setSwapInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleRequestSwap();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={isSwapping || !swapInput.trim()}
+                onClick={() => handleRequestSwap()}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {isSwapping ? 'Analyzing...' : 'Find Swap'}
+              </button>
+            </div>
+
+            {/* Quick Suggestions Chips */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1.25rem' }}>
+              {['Potato Chips', 'Ice Cream', 'Soda', 'White Bread', 'Fried Chicken', 'Candy Bar'].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => {
+                    setSwapInput(preset);
+                    handleRequestSwap(preset);
+                  }}
+                  style={{
+                    background: 'var(--bg-surface-elevated)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-full)',
+                    padding: '0.25rem 0.65rem',
+                    fontSize: '0.75rem',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+
+            {/* Swap Results Display */}
+            {swapResult && (
+              <div
+                style={{
+                  background: 'var(--bg-surface-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '1.25rem',
+                  marginBottom: '1.25rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <CheckCircle2 size={18} color="#10b981" />
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Original: <del>{swapResult.original}</del>
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#10b981', marginBottom: '0.5rem' }}>
+                  {swapResult.swap}
+                </div>
+
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', marginBottom: '0.75rem', lineHeight: 1.4 }}>
+                  {swapResult.benefit}
+                </p>
+
+                <div style={{ fontSize: '0.8rem', color: '#06b6d4', background: 'rgba(6, 182, 212, 0.1)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-sm)', marginBottom: '1rem' }}>
+                  Estimated Profile: {swapResult.estimatedMacros}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Quick Log to:</span>
+                  {(['snack', 'breakfast', 'lunch', 'dinner'] as const).map((slot) => (
+                    <button
+                      key={slot}
+                      type="button"
+                      className="btn-secondary"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', textTransform: 'capitalize' }}
+                      onClick={() => handleApplySwapAsFood(slot)}
+                    >
+                      + {slot}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

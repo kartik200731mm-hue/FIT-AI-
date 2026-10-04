@@ -1,18 +1,29 @@
 export interface IBmiResult {
   bmi: number;
-  category: 'Underweight' | 'Normal weight' | 'Overweight' | 'Obesity class I' | 'Obesity class II+';
+  category: 'Underweight' | 'Normal weight' | 'Overweight' | 'Obesity class I' | 'Obesity class II+' | 'Youth Growth Reference';
   color: string;
   context: string;
   healthyWeightRangeKg: { min: number; max: number };
 }
 
-export function calculateBMI(weightKg: number, heightCm: number): IBmiResult {
+export function calculateBMI(weightKg: number, heightCm: number, age?: number): IBmiResult {
   const heightM = heightCm / 100;
   const rawBmi = weightKg / (heightM * heightM);
   const bmi = Math.round(rawBmi * 10) / 10;
 
   const minHealthyWeight = Math.round(18.5 * heightM * heightM * 10) / 10;
   const maxHealthyWeight = Math.round(24.9 * heightM * heightM * 10) / 10;
+
+  // AGE-AWARE SAFEGUARD: Adult BMI scales are not diagnostic or clinically valid for individuals under 18
+  if (age !== undefined && age < 18) {
+    return {
+      bmi,
+      category: 'Youth Growth Reference',
+      color: '#10b981',
+      context: 'Adult BMI categorization scales do not apply to youth under 18. Healthy development, hydration, balanced meals, and regular enjoyable movement take precedence over weight indices.',
+      healthyWeightRangeKg: { min: minHealthyWeight, max: maxHealthyWeight },
+    };
+  }
 
   let category: IBmiResult['category'] = 'Normal weight';
   let color = '#10b981'; // vibrant emerald
@@ -57,6 +68,7 @@ export interface ICaloricNeeds {
   carbsGrams: number;
   fatGrams: number;
   waterMl: number;
+  isMinorSafeAdjusted?: boolean;
 }
 
 export function calculateCaloricAndMacroTargets(params: {
@@ -68,6 +80,7 @@ export function calculateCaloricAndMacroTargets(params: {
   fitnessGoal: 'weight_loss' | 'muscle_gain' | 'maintenance' | 'endurance' | 'general_health';
 }): ICaloricNeeds {
   const { weightKg, heightCm, age, gender, activityLevel, fitnessGoal } = params;
+  const isMinor = age < 18;
 
   // Mifflin-St Jeor Equation
   let bmr: number;
@@ -92,39 +105,49 @@ export function calculateCaloricAndMacroTargets(params: {
   const multiplier = activityMultipliers[activityLevel] || 1.375;
   const tdee = Math.round(bmr * multiplier);
 
-  // Goal-based Caloric Adjustment (safe bounds: never below 1200 kcal for women or 1500 kcal for men)
+  // Goal-based Caloric Adjustment
   let targetCalories = tdee;
   let proteinRatio = 0.25;
   let carbsRatio = 0.50;
   let fatRatio = 0.25;
+  let isMinorSafeAdjusted = false;
 
-  switch (fitnessGoal) {
-    case 'weight_loss':
-      targetCalories = Math.max(1300, Math.round(tdee * 0.82)); // 18% gentle deficit
-      proteinRatio = 0.32;
-      carbsRatio = 0.40;
-      fatRatio = 0.28;
-      break;
-    case 'muscle_gain':
-      targetCalories = Math.round(tdee * 1.12); // 12% slight surplus
-      proteinRatio = 0.30;
-      carbsRatio = 0.48;
-      fatRatio = 0.22;
-      break;
-    case 'endurance':
-      targetCalories = Math.round(tdee * 1.05);
-      proteinRatio = 0.22;
-      carbsRatio = 0.58;
-      fatRatio = 0.20;
-      break;
-    case 'maintenance':
-    case 'general_health':
-    default:
-      targetCalories = tdee;
-      proteinRatio = 0.25;
-      carbsRatio = 0.50;
-      fatRatio = 0.25;
-      break;
+  // AGE-AWARE SAFEGUARD: Users under 18 must NEVER be assigned a calorie deficit or weight-loss diet
+  if (isMinor && fitnessGoal === 'weight_loss') {
+    targetCalories = tdee; // Enforce maintenance/growth baseline
+    proteinRatio = 0.25;
+    carbsRatio = 0.50;
+    fatRatio = 0.25;
+    isMinorSafeAdjusted = true;
+  } else {
+    switch (fitnessGoal) {
+      case 'weight_loss':
+        targetCalories = Math.max(1300, Math.round(tdee * 0.82)); // 18% gentle deficit for adults only
+        proteinRatio = 0.32;
+        carbsRatio = 0.40;
+        fatRatio = 0.28;
+        break;
+      case 'muscle_gain':
+        targetCalories = Math.round(tdee * 1.12); // 12% slight surplus
+        proteinRatio = 0.30;
+        carbsRatio = 0.48;
+        fatRatio = 0.22;
+        break;
+      case 'endurance':
+        targetCalories = Math.round(tdee * 1.05);
+        proteinRatio = 0.22;
+        carbsRatio = 0.58;
+        fatRatio = 0.20;
+        break;
+      case 'maintenance':
+      case 'general_health':
+      default:
+        targetCalories = tdee;
+        proteinRatio = 0.25;
+        carbsRatio = 0.50;
+        fatRatio = 0.25;
+        break;
+    }
   }
 
   // Protein = 4 kcal/g, Carbs = 4 kcal/g, Fat = 9 kcal/g
@@ -143,5 +166,6 @@ export function calculateCaloricAndMacroTargets(params: {
     carbsGrams,
     fatGrams,
     waterMl,
+    isMinorSafeAdjusted,
   };
 }

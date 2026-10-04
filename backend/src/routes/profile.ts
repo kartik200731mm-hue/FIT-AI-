@@ -8,15 +8,15 @@ import { IUserProfile, IWeightEntry } from '../types';
 const router = Router();
 
 const profileSchema = z.object({
-  age: z.number().int().min(14, 'Age must be at least 14').max(100, 'Age must be 100 or less'),
-  gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']),
+  age: z.number().int().min(14, 'Age must be at least 14').max(100, 'Age must be 100 or less').optional().default(25),
+  gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']).optional().default('prefer_not_to_say'),
   heightCm: z.number().min(100, 'Height must be at least 100 cm').max(250, 'Height must be 250 cm or less'),
   weightKg: z.number().min(30, 'Weight must be at least 30 kg').max(300, 'Weight must be 300 kg or less'),
-  targetWeightKg: z.number().min(30, 'Target weight must be at least 30 kg').max(300, 'Target weight must be 300 kg or less'),
+  targetWeightKg: z.number().min(30, 'Target weight must be at least 30 kg').max(300, 'Target weight must be 300 kg or less').optional(),
   activityLevel: z.enum(['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active']),
   fitnessGoal: z.enum(['weight_loss', 'muscle_gain', 'maintenance', 'endurance', 'general_health']),
   dietaryPreference: z.enum(['no_restriction', 'vegetarian', 'vegan', 'pescatarian', 'keto', 'paleo', 'halal', 'kosher', 'low_carb']),
-  limitations: z.string().max(500).default(''),
+  limitations: z.string().max(500, 'Limitations note must be 500 characters or less').optional().default(''),
 });
 
 // GET /api/profile
@@ -27,7 +27,7 @@ router.get('/', requireAuth, (req: AuthenticatedRequest, res: Response): void =>
     res.status(404).json({ error: 'Profile not found. Please complete profile onboarding.' });
     return;
   }
-  const bmiInfo = calculateBMI(profile.weightKg, profile.heightCm);
+  const bmiInfo = calculateBMI(profile.weightKg, profile.heightCm, profile.age);
   res.json({ profile, bmiInfo });
 });
 
@@ -41,23 +41,27 @@ router.post('/', requireAuth, (req: AuthenticatedRequest, res: Response): void =
   }
 
   const data = parseResult.data;
-  const bmiCalc = calculateBMI(data.weightKg, data.heightCm);
+  const age = data.age ?? 25;
+  const gender = data.gender ?? 'prefer_not_to_say';
+  const targetWeightKg = data.targetWeightKg ?? data.weightKg;
+
+  const bmiCalc = calculateBMI(data.weightKg, data.heightCm, age);
   const targets = calculateCaloricAndMacroTargets({
     weightKg: data.weightKg,
     heightCm: data.heightCm,
-    age: data.age,
-    gender: data.gender,
+    age,
+    gender,
     activityLevel: data.activityLevel,
     fitnessGoal: data.fitnessGoal,
   });
 
   const updatedProfile: IUserProfile = {
     userId: req.user.id,
-    age: data.age,
-    gender: data.gender,
+    age,
+    gender,
     heightCm: data.heightCm,
     weightKg: data.weightKg,
-    targetWeightKg: data.targetWeightKg,
+    targetWeightKg,
     activityLevel: data.activityLevel,
     fitnessGoal: data.fitnessGoal,
     dietaryPreference: data.dietaryPreference,

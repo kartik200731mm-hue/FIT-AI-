@@ -202,6 +202,13 @@ class ApiClient {
     });
   }
 
+  async getHealthySwap(foodName: string) {
+    return this.request<{ original: string; swap: string; benefit: string; estimatedMacros: string; source: string }>('/ai-coach/swap-food', {
+      method: 'POST',
+      body: JSON.stringify({ foodName }),
+    });
+  }
+
   // --- Reminders ---
   async getReminders() {
     return this.request<{ reminders: IReminder[] }>('/reminders');

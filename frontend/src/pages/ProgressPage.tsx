@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { IWeightEntry, IBmiResult } from '../types';
 import { WeightChart } from '../components/WeightChart';
 import { BmiCard } from '../components/BmiCard';
+import { ActivityHeatmap } from '../components/ActivityHeatmap';
 import { HealthDisclaimer } from '../components/HealthDisclaimer';
 import {
   Scale,
@@ -163,8 +164,11 @@ export const ProgressPage: React.FC = () => {
         </div>
 
         {/* BMI Contextual Card */}
-        <BmiCard bmiInfo={bmiInfo} heightCm={profile?.heightCm} weightKg={latestWeight} />
+        <BmiCard bmiInfo={bmiInfo} heightCm={profile?.heightCm} weightKg={latestWeight} age={profile?.age} />
       </div>
+
+      {/* Consistency Heatmap */}
+      <ActivityHeatmap />
 
       {/* Weigh-in History Table */}
       <div className="surface-card">

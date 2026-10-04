@@ -29,7 +29,7 @@ export interface IUserProfile {
 
 export interface IBmiResult {
   bmi: number;
-  category: 'Underweight' | 'Normal weight' | 'Overweight' | 'Obesity class I' | 'Obesity class II+';
+  category: 'Underweight' | 'Normal weight' | 'Overweight' | 'Obesity class I' | 'Obesity class II+' | 'Youth Growth Reference';
   color: string;
   context: string;
   healthyWeightRangeKg: { min: number; max: number };

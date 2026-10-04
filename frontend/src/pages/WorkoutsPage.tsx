@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { IWorkoutPlan, IExercise } from '../types';
 import { RestTimerModal } from '../components/RestTimerModal';
+import { WorkoutRunnerModal } from '../components/WorkoutRunnerModal';
 import { HealthDisclaimer } from '../components/HealthDisclaimer';
 import {
   Dumbbell,
@@ -11,6 +12,7 @@ import {
   CheckCircle2,
   Circle,
   Timer,
+  Play,
 } from 'lucide-react';
 
 export const WorkoutsPage: React.FC = () => {
@@ -20,6 +22,7 @@ export const WorkoutsPage: React.FC = () => {
 
   // Modals
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [isRunnerOpen, setIsRunnerOpen] = useState(false);
   const [aiDays, setAiDays] = useState(4);
   const [aiDifficulty, setAiDifficulty] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
   const [generatingAi, setGeneratingAi] = useState(false);
@@ -259,13 +262,22 @@ export const WorkoutsPage: React.FC = () => {
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>{currentDay.dayName}</h3>
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Target Focus: {currentDay.focus}</p>
                 </div>
-                <button
-                  className="btn-secondary"
-                  style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem' }}
-                  onClick={() => setIsAddExerciseModalOpen(true)}
-                >
-                  <Plus size={16} /> Add Exercise
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    className="btn-primary"
+                    style={{ fontSize: '0.85rem', padding: '0.45rem 1rem' }}
+                    onClick={() => setIsRunnerOpen(true)}
+                  >
+                    <Play size={16} /> Start Session
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem' }}
+                    onClick={() => setIsAddExerciseModalOpen(true)}
+                  >
+                    <Plus size={16} /> Add Exercise
+                  </button>
+                </div>
               </div>
 
               {/* Exercises List */}
@@ -546,6 +558,18 @@ export const WorkoutsPage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Workout Runner Modal */}
+      {currentDay && (
+        <WorkoutRunnerModal
+          day={currentDay}
+          isOpen={isRunnerOpen}
+          onClose={() => setIsRunnerOpen(false)}
+          onCompleteWorkout={() => {
+            loadWorkouts();
+          }}
+        />
       )}
     </div>
   );

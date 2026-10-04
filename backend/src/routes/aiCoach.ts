@@ -12,7 +12,7 @@ router.get('/status', requireAuth, (_req, res: Response): void => {
   res.json({
     status: 'ready',
     mode: isLive ? 'live_gemini' : 'expert_deterministic',
-    engineLabel: isLive ? 'Google Gemini 1.5 Flash (Live)' : 'Fit AI Expert Deterministic Engine (Active Demo Mode)',
+    engineLabel: isLive ? 'Google Gemini 3.8 Flash (Live)' : 'Fit AI Expert Deterministic Engine (Active Demo Mode)',
     notice: isLive
       ? 'Connected to real-time generative AI engine.'
       : 'Running in high-precision Deterministic Demo Mode (offline-ready, instant results, zero API cost).',
@@ -93,6 +93,31 @@ router.post('/chat', requireAuth, aiLimiter, async (req: AuthenticatedRequest, r
   } catch (error: any) {
     console.error('AI Coach Chat error:', error);
     res.status(500).json({ error: 'Failed to process coach query. Please try again.' });
+  }
+});
+
+// POST /api/ai-coach/swap-food
+const swapFoodSchema = z.object({
+  foodName: z.string().min(1, 'Food name is required').max(100),
+});
+
+router.post('/swap-food', requireAuth, aiLimiter, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!req.user) return;
+  const parseResult = swapFoodSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: parseResult.error.errors[0].message });
+    return;
+  }
+
+  const { foodName } = parseResult.data;
+  const profile = dbStore.getProfileByUserId(req.user.id);
+
+  try {
+    const result = await AIService.recommendHealthySwap(foodName, profile);
+    res.json(result);
+  } catch (error: any) {
+    console.error('AI Swap error:', error);
+    res.status(500).json({ error: 'Failed to generate swap recommendation.' });
   }
 });
 

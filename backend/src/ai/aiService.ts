@@ -2,11 +2,57 @@ import { ENV } from '../config/env';
 import { IUserProfile, IWorkoutPlan } from '../types';
 import { DeterministicCoach } from './deterministicCoach';
 
-export interface IAICoachResponse {
-  source: 'gemini' | 'deterministic_expert';
-  message: string;
-  data?: any;
-  medicalNotice: string;
+function cleanAndParseJson(raw: string): any {
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
+  return JSON.parse(cleaned);
+}
+
+const CANDIDATE_MODELS = [
+  'gemini-3.5-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-flash-latest',
+];
+
+async function callGeminiCascade(prompt: string): Promise<string> {
+  const key = ENV.GEMINI_API_KEY;
+  if (!key) throw new Error('No API Key');
+
+  let lastError: any = null;
+
+  for (const model of CANDIDATE_MODELS) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: 'application/json' },
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const resJson = await response.json();
+        const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (rawText) return rawText;
+      } else {
+        lastError = new Error(`Model ${model} returned HTTP ${response.status}`);
+      }
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('All candidate Gemini models failed');
 }
 
 export class AIService {
@@ -28,11 +74,17 @@ export class AIService {
     }
 
     try {
+      const isMinorOrUnknown = !profile.age || profile.age < 18;
+      const ageSafeguard = isMinorOrUnknown
+        ? 'STRICT YOUTH SAFEGUARD: The user is a minor or youth. You MUST NOT prescribe calorie burning fatigue, cutting protocols, or body-composition pressure. Focus on enjoyable functional athletics, posture, bodyweight mastery, agility, and healthy recovery.'
+        : '';
+
       const prompt = `You are a certified fitness coach. Generate a structured ${daysPerWeek}-day weekly workout plan for:
-- Goal: ${profile.fitnessGoal}
+- Goal: ${isMinorOrUnknown ? 'general_health / youth development' : profile.fitnessGoal}
 - Difficulty: ${difficulty}
 - Physical limitations/injuries: ${profile.limitations || 'None'}
-- Age: ${profile.age}, Weight: ${profile.weightKg}kg
+- Age: ${profile.age || 'Unknown'}, Weight: ${profile.weightKg}kg
+${ageSafeguard}
 
 Respond with ONLY a raw valid JSON object matching this schema:
 {
@@ -61,32 +113,13 @@ Respond with ONLY a raw valid JSON object matching this schema:
   "notes": "Safe recovery guidance"
 }`;
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${ENV.GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json' },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Gemini API returned status ${response.status}`);
-      }
-
-      const resJson = await response.json();
-      const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawText) throw new Error('Empty response from Gemini');
-
-      const parsed = JSON.parse(rawText);
+      const rawText = await callGeminiCascade(prompt);
+      const parsed = cleanAndParseJson(rawText);
       const plan: IWorkoutPlan = {
         id: `plan_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         userId: profile.userId,
         title: parsed.title || `${difficulty} Custom Workout Plan`,
-        goal: profile.fitnessGoal.replace('_', ' ').toUpperCase(),
+        goal: (isMinorOrUnknown ? 'General Vitality & Movement' : profile.fitnessGoal.replace('_', ' ')).toUpperCase(),
         difficulty: difficulty,
         daysPerWeek: Array.isArray(parsed.days) ? parsed.days.length : daysPerWeek,
         days: parsed.days || [],
@@ -119,10 +152,16 @@ Respond with ONLY a raw valid JSON object matching this schema:
     }
 
     try {
+      const isMinorOrUnknown = !profile.age || profile.age < 18;
+      const ageSafeguard = isMinorOrUnknown
+        ? 'STRICT YOUTH SAFEGUARD: The user is a minor (under 18) or youth. You MUST NOT prescribe calorie deficits, low-carb cutting, fasting, or restrictive dieting. Prescribe wholesome, balanced, energizing meals supporting healthy growth and daily energy.'
+        : '';
+
       const prompt = `You are a sports nutritionist. Generate a 1-day meal recommendation for:
 - Dietary preference: ${profile.dietaryPreference}
 - Target Daily Calories: ${profile.dailyCalorieTarget || 2000} kcal
-- Goal: ${profile.fitnessGoal}
+- Goal: ${isMinorOrUnknown ? 'general_health / balanced youth nourishment' : profile.fitnessGoal}
+${ageSafeguard}
 
 Respond ONLY with a JSON object:
 {
@@ -134,25 +173,8 @@ Respond ONLY with a JSON object:
   "guidanceNotes": "Practical mindful eating tips"
 }`;
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${ENV.GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json' },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Gemini API returned status ${response.status}`);
-      }
-
-      const resJson = await response.json();
-      const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsed = JSON.parse(rawText);
+      const rawText = await callGeminiCascade(prompt);
+      const parsed = cleanAndParseJson(rawText);
 
       return { recommendations: parsed, source: 'gemini', medicalNotice };
     } catch (err) {
@@ -175,12 +197,18 @@ Respond ONLY with a JSON object:
     }
 
     try {
+      const isMinorOrUnknown = !profile?.age || profile.age < 18;
+      const youthInstruction = isMinorOrUnknown
+        ? 'STRICT YOUTH SAFEGUARD: The user is a minor (under 18) or youth. You MUST NOT prescribe or advise calorie deficits, weight loss, fat cutting, fasting, or body-shaming comparisons. Emphasize joyful movement, balanced nutrient-dense meals, hydration, and restorative sleep.'
+        : '';
+
       const userContext = profile
-        ? `User context: Goal=${profile.fitnessGoal}, Calories=${profile.dailyCalorieTarget}, Diet=${profile.dietaryPreference}, Constraints=${profile.limitations || 'None'}`
+        ? `User context: Goal=${profile.fitnessGoal}, Calories=${profile.dailyCalorieTarget}, Diet=${profile.dietaryPreference}, Constraints=${profile.limitations || 'None'}, Age=${profile.age || 'Unknown'}`
         : 'User context: Fitness enthusiast';
 
       const prompt = `You are Fit AI, a friendly, encouraging, science-backed fitness and nutrition coach.
 ${userContext}
+${youthInstruction}
 User question: "${query}"
 
 Guidelines:
@@ -193,23 +221,8 @@ Guidelines:
   "actionableTips": ["Tip 1", "Tip 2", "Tip 3"]
 }`;
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${ENV.GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json' },
-          }),
-        }
-      );
-
-      if (!response.ok) throw new Error(`Gemini API error ${response.status}`);
-
-      const resJson = await response.json();
-      const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsed = JSON.parse(rawText);
+      const rawText = await callGeminiCascade(prompt);
+      const parsed = cleanAndParseJson(rawText);
 
       return {
         response: parsed.response || 'Stay consistent and focus on sustainable healthy habits!',
@@ -221,6 +234,53 @@ Guidelines:
       console.warn('Gemini chat fallback to expert engine:', err);
       const fallback = DeterministicCoach.provideCoachAdvice(query, profile);
       return { ...fallback, source: 'deterministic_expert' };
+    }
+  }
+
+  static async recommendHealthySwap(
+    foodName: string,
+    profile?: IUserProfile
+  ): Promise<{ original: string; swap: string; benefit: string; estimatedMacros: string; source: 'gemini' | 'deterministic_expert' }> {
+    if (!this.isLiveAiAvailable()) {
+      return {
+        original: foodName,
+        swap: `High-Protein ${foodName} Alternative (e.g. Greek yogurt / Grilled protein / Lentils)`,
+        benefit: 'Boosts protein synthesis and lowers saturated fat or refined sugar while preserving flavor.',
+        estimatedMacros: '~220 kcal, 26g protein, 8g carbs, 4g fat',
+        source: 'deterministic_expert',
+      };
+    }
+
+    try {
+      const prompt = `You are a sports dietitian. Suggest a healthier, high-protein or nutrient-dense alternative/swap for "${foodName}".
+Dietary Preference: ${profile?.dietaryPreference || 'no restriction'}.
+Goal: ${profile?.fitnessGoal || 'fitness'}.
+
+Respond ONLY with raw JSON:
+{
+  "original": "${foodName}",
+  "swap": "Alternative name and serving",
+  "benefit": "Why this is healthier and aligns with goals (1-2 sentences)",
+  "estimatedMacros": "e.g. 240 kcal, 28g protein, 14g carbs, 5g fat"
+}`;
+
+      const rawText = await callGeminiCascade(prompt);
+      const parsed = cleanAndParseJson(rawText);
+      return {
+        original: foodName,
+        swap: parsed.swap || `Nutrient-Dense ${foodName} Alternative`,
+        benefit: parsed.benefit || 'Optimizes protein-to-calorie ratio and energy retention.',
+        estimatedMacros: parsed.estimatedMacros || '~250 kcal, 25g protein',
+        source: 'gemini',
+      };
+    } catch (err) {
+      return {
+        original: foodName,
+        swap: `High-Protein ${foodName} Alternative`,
+        benefit: 'Provides balanced satiety and supports lean body composition.',
+        estimatedMacros: '~230 kcal, 24g protein',
+        source: 'deterministic_expert',
+      };
     }
   }
 }
